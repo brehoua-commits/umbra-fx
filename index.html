@@ -64,6 +64,9 @@
         button:active {
             background: #fff;
         }
+        button:disabled {
+            opacity: 0.5;
+        }
         #preview {
             width: 100%;
             max-height: 250px;
@@ -72,6 +75,19 @@
             display: none;
             border-radius: 4px;
             border: 1px dashed #444;
+        }
+        #downloadLink {
+            display: none;
+            width: 100%;
+            text-align: center;
+            padding: 12px;
+            margin-top: 10px;
+            background: transparent;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #e0e0e0;
+            text-decoration: none;
+            box-sizing: border-box;
         }
     </style>
 </head>
@@ -91,28 +107,131 @@
             <option value="melancholy">Melancholic Dream (Atmosphère onirique)</option>
         </select>
 
-        <button onclick="processImage()">Appliquer l'effet</button>
+        <button id="processBtn" onclick="processImage()">Appliquer l'effet</button>
 
+        <canvas id="workCanvas" style="display:none;"></canvas>
         <img id="preview" alt="Aperçu du résultat">
+        <a id="downloadLink" download="umbra-fx-result.png">Télécharger le résultat</a>
     </div>
 
     <script>
+        const canvas = document.getElementById('workCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function clamp(v) {
+            return Math.max(0, Math.min(255, v));
+        }
+
+        // Fusain : niveaux de gris + contraste renforcé + léger grain
+        function applyCharcoal(imageData) {
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                // contraste (courbe en S simplifiée)
+                let v = ((gray - 128) * 1.45) + 128;
+                // grain léger
+                v += (Math.random() - 0.5) * 12;
+                v = clamp(v);
+                d[i] = d[i + 1] = d[i + 2] = v;
+            }
+            return imageData;
+        }
+
+        // Ombres profondes : assombrit fortement les tons moyens/bas, garde les hautes lumières
+        function applyDeepShadow(imageData) {
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                for (let c = 0; c < 3; c++) {
+                    let v = d[i + c] / 255;
+                    // courbe gamma qui écrase les ombres
+                    v = Math.pow(v, 1.8);
+                    d[i + c] = clamp(v * 255 * 0.9);
+                }
+            }
+            return imageData;
+        }
+
+        // Mélancolie : désaturation partielle + teinte bleu-gris + vignette
+        function applyMelancholy(imageData) {
+            const d = imageData.data;
+            const w = imageData.width, h = imageData.height;
+            const cx = w / 2, cy = h / 2;
+            const maxDist = Math.sqrt(cx * cx + cy * cy);
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
+                    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+
+                    // mélange 60% désaturé / 40% couleur d'origine
+                    let r = gray * 0.6 + d[i] * 0.4;
+                    let g = gray * 0.6 + d[i + 1] * 0.4;
+                    let b = gray * 0.6 + d[i + 2] * 0.4;
+
+                    // teinte bleu-gris
+                    r -= 10;
+                    b += 15;
+
+                    // vignette
+                    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / maxDist;
+                    const vignette = 1 - dist * 0.5;
+
+                    d[i] = clamp(r * vignette);
+                    d[i + 1] = clamp(g * vignette);
+                    d[i + 2] = clamp(b * vignette);
+                }
+            }
+            return imageData;
+        }
+
         function processImage() {
             const input = document.getElementById('imageInput');
             const preview = document.getElementById('preview');
+            const downloadLink = document.getElementById('downloadLink');
             const mode = document.getElementById('modeSelect').value;
+            const btn = document.getElementById('processBtn');
 
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                    alert(`Effet "${mode}" appliqué avec succès (Simulation mobile) !`);
-                }
-                reader.readAsDataURL(input.files[0]);
-            } else {
+            if (!input.files || !input.files[0]) {
                 alert("Veuillez d'abord sélectionner une image.");
+                return;
             }
+
+            btn.disabled = true;
+            btn.textContent = 'Traitement en cours...';
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                    if (mode === 'charcoal') {
+                        imageData = applyCharcoal(imageData);
+                    } else if (mode === 'deep-shadow') {
+                        imageData = applyDeepShadow(imageData);
+                    } else if (mode === 'melancholy') {
+                        imageData = applyMelancholy(imageData);
+                    }
+
+                    ctx.putImageData(imageData, 0, 0);
+
+                    const resultUrl = canvas.toDataURL('image/png');
+                    preview.src = resultUrl;
+                    preview.style.display = 'block';
+
+                    downloadLink.href = resultUrl;
+                    downloadLink.style.display = 'block';
+
+                    btn.disabled = false;
+                    btn.textContent = "Appliquer l'effet";
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
         }
     </script>
 
