@@ -1,0 +1,24 @@
+{
+  "name": "umbra-fx",
+  "version": "1.0.0",
+  "description": "Minimalist and dark aesthetic image processing CLI for creative workflows.",
+  "main": "index.js",
+  "bin": {
+    "umbra-fx": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 0"
+  },
+  "keywords": [
+    "cli",
+    "image-processing",
+    "minimalist",
+    "dark-art",
+    "workflow"
+  ],
+  "author": "Kipre Brehoua Guy Florian",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.0.0"
+  }
+}
